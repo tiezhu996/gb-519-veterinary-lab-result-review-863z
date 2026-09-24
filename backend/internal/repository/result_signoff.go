@@ -65,7 +65,10 @@ func (r *resultSignoffRepository) CreateVersion(ctx context.Context, item *model
 		revision := model.ResultSignoffRevision{
 			ResultSignoffID: item.ID, Version: item.Version, Status: item.Status,
 			Evidence: item.Evidence, Actor: actor, RequestID: requestID, Action: "create",
-			Reason: "signoff drafted", CreatedAt: item.CreatedAt,
+			Reason: "signoff drafted", ReviewBasis: item.ReviewBasis,
+			RunCode: item.RunCode, RunStatus: item.RunStatus,
+			RunMetricValue: item.RunMetricValue, RunMetricUnit: item.RunMetricUnit,
+			RunEvidence: item.RunEvidence, CreatedAt: item.CreatedAt,
 		}
 		if err := tx.Create(&revision).Error; err != nil {
 			return err
@@ -82,7 +85,10 @@ func (r *resultSignoffRepository) UpdateVersion(ctx context.Context, id, expecte
 		revision := model.ResultSignoffRevision{
 			ResultSignoffID: id, Version: item.Version, Status: item.Status,
 			Evidence: item.Evidence, Actor: actor, RequestID: requestID, Action: action,
-			Reason: reason, CreatedAt: item.UpdatedAt,
+			Reason: reason, ReviewBasis: item.ReviewBasis,
+			RunCode: item.RunCode, RunStatus: item.RunStatus,
+			RunMetricValue: item.RunMetricValue, RunMetricUnit: item.RunMetricUnit,
+			RunEvidence: item.RunEvidence, CreatedAt: item.UpdatedAt,
 		}
 		if err := tx.Create(&revision).Error; err != nil {
 			return err

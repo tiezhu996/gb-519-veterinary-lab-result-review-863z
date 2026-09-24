@@ -24,6 +24,8 @@ export function EntityPage({ config, useStore, showRiskTags = false, showResultP
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [pending, setPending] = useState<{ item: DomainRecord; status: string } | null>(null);
+  const [basis, setBasis] = useState('');
+  const [transitionError, setTransitionError] = useState('');
 
   useEffect(() => { void load(config.path); }, [config.path, load]);
   const highRisk = useMemo(() => items.filter((item) => ['high', 'critical'].includes(item.riskLevel)).length, [items]);
@@ -59,10 +61,30 @@ export function EntityPage({ config, useStore, showRiskTags = false, showResultP
 
   const confirmTransition = async () => {
     if (!pending) return;
-    await transition(config.path, pending.item, pending.status);
-    setSearch('');
-    setPending(null);
+    try {
+      await transition(config.path, pending.item, pending.status, basis);
+      setSearch('');
+      setPending(null);
+      setBasis('');
+      setTransitionError('');
+    } catch (error) {
+      setTransitionError(error instanceof Error ? error.message : String(error));
+    }
   };
+
+  const openTransition = (item: DomainRecord, status: string) => {
+    setPending({ item, status });
+    setBasis('');
+    setTransitionError('');
+  };
+
+  const closeTransition = () => {
+    setPending(null);
+    setBasis('');
+    setTransitionError('');
+  };
+
+  const signingHighRisk = Boolean(pending && config.key === 'resultSignoff' && pending.status === 'signed' && ['high', 'critical'].includes(pending.item.riskLevel));
 
   return <main className="workspace">
     <header className="page-header"><div><p className="eyebrow">业务工作台</p><h1>{config.label}</h1><p>统一管理{config.label}的状态、风险、证据与责任人。</p></div>{canOperate ? <UiButton onClick={() => setShowCreate(true)}>新增{config.label}</UiButton> : <span className="access-note">只读权限</span>}</header>
@@ -71,10 +93,10 @@ export function EntityPage({ config, useStore, showRiskTags = false, showResultP
     <section className="toolbar"><input aria-label="搜索" placeholder={`搜索${config.label}编码或名称`} value={search} onChange={(event) => setSearch(event.target.value)} /><UiButton onClick={() => void load(config.path, search)}>查询</UiButton><button className="link-button" onClick={() => { setSearch(''); void load(config.path); }}>重置</button></section>
     {error && <div className="alert" role="alert">{error}</div>}
     <section className="table-shell" aria-busy={loading}><table><thead><tr><th>编码</th><th>名称</th><th>状态</th><th>风险</th><th>责任人</th><th>指标</th><th>更新时间</th><th>操作</th></tr></thead><tbody>
-      {items.map((item) => { const next = nextStatus(item.status, config.primaryTransitions); return <tr key={item.id}><td><strong>{item.code}</strong></td><td>{item.name}<small>{item.facility}</small></td><td><StatusBadge status={item.status}/></td><td>{showRiskTags ? <RiskTag level={item.riskLevel}/> : item.riskLevel}</td><td>{item.owner}</td><td>{item.metricValue} {item.metricUnit}</td><td>{formatDate(item.updatedAt)}</td><td>{next && canAdvance(item) ? <button className="table-action" onClick={() => setPending({ item, status: next })}>推进至 {next}</button> : <span className="muted">{next ? unavailableReason(item) : '流程结束'}</span>}</td></tr>; })}
+      {items.map((item) => { const next = nextStatus(item.status, config.primaryTransitions); return <tr key={item.id}><td><strong>{item.code}</strong></td><td>{item.name}<small>{item.facility}</small></td><td><StatusBadge status={item.status}/></td><td>{showRiskTags ? <RiskTag level={item.riskLevel}/> : item.riskLevel}</td><td>{item.owner}</td><td>{item.metricValue} {item.metricUnit}</td><td>{formatDate(item.updatedAt)}</td><td>{next && canAdvance(item) ? <button className="table-action" onClick={() => openTransition(item, next)}>推进至 {next}</button> : <span className="muted">{next ? unavailableReason(item) : '流程结束'}</span>}</td></tr>; })}
       {!items.length && !loading && <EmptyState message="暂无记录" colSpan={8} />}
     </tbody></table>{loading && <div className="loading">正在同步业务数据…</div>}</section>
     <ConfirmDialog open={showCreate} title={`新增${config.label}`} onCancel={() => setShowCreate(false)} onConfirm={() => void createDemo().catch(() => undefined)}><p>将创建一条包含完整责任人、风险和证据信息的演示记录。</p></ConfirmDialog>
-    <ConfirmDialog open={Boolean(pending)} title="确认状态迁移" onCancel={() => setPending(null)} onConfirm={() => void confirmTransition().catch(() => undefined)}><p>状态迁移会写入不可覆盖的版本与审计日志。</p><strong>{pending?.item.status} → {pending?.status}</strong></ConfirmDialog>
+    <ConfirmDialog open={Boolean(pending)} title="确认状态迁移" onCancel={closeTransition} onConfirm={() => void confirmTransition()} confirmDisabled={signingHighRisk && !basis.trim()}><p>状态迁移会写入不可覆盖的版本与审计日志。</p><strong>{pending?.item.status} → {pending?.status}</strong>{signingHighRisk && <label className="basis-field">复核依据（高风险签发必填，随本次复核版本留存）<textarea rows={3} value={basis} onChange={(event) => setBasis(event.target.value)} placeholder={`填写复核依据；服务端将按关联编码 ${pending?.item.relatedCode || '(空)'} 核验检测运行`} /></label>}{transitionError && <div className="alert" role="alert">{transitionError}</div>}</ConfirmDialog>
   </main>;
 }

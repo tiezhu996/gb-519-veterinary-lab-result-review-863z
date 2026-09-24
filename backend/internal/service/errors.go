@@ -12,4 +12,8 @@ var (
 	ErrLocked            = errors.New("record is locked after peer review begins")
 	ErrPreparationOwner  = errors.New("only the original preparer may edit or submit this draft")
 	ErrSeparationOfDuty  = errors.New("preparer and reviewer must be different users")
+	ErrReviewBasisNeeded = errors.New("high-risk signoff is missing the written review basis")
+	ErrAssayRunMissing   = errors.New("linked assay run does not exist")
+	ErrAssayRunInvalid   = errors.New("linked assay run has not passed validation")
+	ErrAssayRunRiskLow   = errors.New("linked assay run risk is lower than the signoff risk")
 )

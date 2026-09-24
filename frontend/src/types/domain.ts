@@ -18,6 +18,12 @@ export interface DomainRecord {
   preparedBy?: string;
   reviewedBy?: string;
   reviewReason?: string;
+  reviewBasis?: string;
+  runCode?: string;
+  runStatus?: string;
+  runMetricValue?: number;
+  runMetricUnit?: string;
+  runEvidence?: string;
   revisions?: SignoffRevision[];
   createdAt: string;
   updatedAt: string;
@@ -32,6 +38,12 @@ export interface SignoffRevision {
   requestId: string;
   action: string;
   reason: string;
+  reviewBasis?: string;
+  runCode?: string;
+  runStatus?: string;
+  runMetricValue?: number;
+  runMetricUnit?: string;
+  runEvidence?: string;
   createdAt: string;
 }
 

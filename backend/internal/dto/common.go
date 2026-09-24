@@ -26,6 +26,9 @@ type TransitionRequest struct {
 	Status          string `json:"status" binding:"required,max=40"`
 	ExpectedVersion uint   `json:"expectedVersion" binding:"required"`
 	Reason          string `json:"reason" binding:"required,min=3,max=500"`
+	// ReviewBasis carries the reviewer's written basis for high-risk signoff
+	// decisions; other entities and transitions ignore it.
+	ReviewBasis string `json:"reviewBasis" binding:"max=500"`
 }
 
 type AuditSummaryQuery struct {

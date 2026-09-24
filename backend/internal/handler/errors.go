@@ -21,7 +21,9 @@ func handleError(c *gin.Context, err error) {
 		util.Fail(c, http.StatusForbidden, "forbidden", err.Error())
 	case errors.Is(err, service.ErrInvalidTransition), errors.Is(err, service.ErrInvalidInput),
 		errors.Is(err, service.ErrReviewRequired), errors.Is(err, service.ErrLocked),
-		errors.Is(err, service.ErrPreparationOwner), errors.Is(err, service.ErrSeparationOfDuty):
+		errors.Is(err, service.ErrPreparationOwner), errors.Is(err, service.ErrSeparationOfDuty),
+		errors.Is(err, service.ErrReviewBasisNeeded), errors.Is(err, service.ErrAssayRunMissing),
+		errors.Is(err, service.ErrAssayRunInvalid), errors.Is(err, service.ErrAssayRunRiskLow):
 		util.Fail(c, http.StatusUnprocessableEntity, "business_rule", err.Error())
 	default:
 		_ = c.Error(err)

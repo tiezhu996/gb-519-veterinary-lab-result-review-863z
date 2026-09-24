@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/blueship581/veterinary-lab-result-review/backend/internal/dto"
 	"github.com/blueship581/veterinary-lab-result-review/backend/internal/model"
 	"github.com/blueship581/veterinary-lab-result-review/backend/internal/repository"
+	"gorm.io/gorm"
 )
 
 type ResultSignoffService interface {
@@ -24,11 +26,12 @@ type ResultSignoffService interface {
 
 type resultSignoffService struct {
 	repository repository.ResultSignoffRepository
+	assays     repository.AssayRunRepository
 	security   SecurityService
 }
 
-func NewResultSignoffService(repo repository.ResultSignoffRepository, security SecurityService) ResultSignoffService {
-	return &resultSignoffService{repository: repo, security: security}
+func NewResultSignoffService(repo repository.ResultSignoffRepository, assays repository.AssayRunRepository, security SecurityService) ResultSignoffService {
+	return &resultSignoffService{repository: repo, assays: assays, security: security}
 }
 
 func (s *resultSignoffService) List(ctx context.Context, query dto.PageQuery) (repository.Page[model.ResultSignoff], error) {
@@ -122,6 +125,11 @@ func (s *resultSignoffService) Transition(ctx context.Context, id uint, input dt
 		current.ReviewedBy = actor
 		current.ReviewReason = strings.TrimSpace(input.Reason)
 	}
+	if target == "signed" {
+		if err := s.applyReviewBasis(ctx, &current, input); err != nil {
+			return model.ResultSignoff{}, err
+		}
+	}
 	before := current.Status
 	current.Status = target
 	current.Version = input.ExpectedVersion + 1
@@ -152,6 +160,55 @@ func isSignoffOperatorRole(role string) bool {
 
 func isSignoffReviewerRole(role string) bool {
 	return role == model.RoleReviewer || role == model.RoleAdmin
+}
+
+// applyReviewBasis enforces the high-risk signing gate: the reviewer must write
+// down the basis, and the 检测运行 linked by relatedCode must exist, be
+// validated and carry at least the signoff's risk. The accepted snapshot is
+// stored on the record so the signing revision keeps the exact grounds.
+func (s *resultSignoffService) applyReviewBasis(ctx context.Context, current *model.ResultSignoff, input dto.TransitionRequest) error {
+	basis := strings.TrimSpace(input.ReviewBasis)
+	if !isHighRiskSignoff(current.RiskLevel) {
+		current.ReviewBasis = basis
+		return nil
+	}
+	if basis == "" {
+		return fmt.Errorf("%w: 请填写复核依据", ErrReviewBasisNeeded)
+	}
+	relatedCode := strings.ToUpper(strings.TrimSpace(current.RelatedCode))
+	if relatedCode == "" {
+		return fmt.Errorf("%w: 关联编码为空，无法定位检测运行", ErrAssayRunMissing)
+	}
+	run, err := s.assays.GetByCode(ctx, relatedCode)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return fmt.Errorf("%w: 关联编码 %s 对应的检测运行不存在", ErrAssayRunMissing, relatedCode)
+	}
+	if err != nil {
+		return fmt.Errorf("lookup 检测运行 %s: %w", relatedCode, err)
+	}
+	if run.Status != "validated" {
+		return fmt.Errorf("%w: 检测运行 %s 当前状态为 %s", ErrAssayRunInvalid, run.Code, run.Status)
+	}
+	if riskRank(run.RiskLevel) < riskRank(current.RiskLevel) {
+		return fmt.Errorf("%w: 检测运行 %s 风险 %s 低于签发单风险 %s", ErrAssayRunRiskLow, run.Code, run.RiskLevel, current.RiskLevel)
+	}
+	current.ReviewBasis = basis
+	current.RunCode = run.Code
+	current.RunStatus = run.Status
+	current.RunMetricValue = run.MetricValue
+	current.RunMetricUnit = run.MetricUnit
+	current.RunEvidence = run.Evidence
+	return nil
+}
+
+func isHighRiskSignoff(riskLevel string) bool {
+	return riskRank(riskLevel) >= riskRank("high")
+}
+
+var signoffRiskRank = map[string]int{"low": 1, "medium": 2, "high": 3, "critical": 4}
+
+func riskRank(riskLevel string) int {
+	return signoffRiskRank[strings.ToLower(strings.TrimSpace(riskLevel))]
 }
 
 func (s *resultSignoffService) StatusCounts(ctx context.Context) (map[string]int64, error) {

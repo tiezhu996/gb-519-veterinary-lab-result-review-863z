@@ -19,7 +19,16 @@ type ResultSignoff struct {
 	PreparedBy   string                  `json:"preparedBy" gorm:"size:80;index"`
 	ReviewedBy   string                  `json:"reviewedBy" gorm:"size:80;index"`
 	ReviewReason string                  `json:"reviewReason" gorm:"size:500"`
-	Revisions    []ResultSignoffRevision `json:"revisions,omitempty" gorm:"foreignKey:ResultSignoffID"`
+	// ReviewBasis records the reviewer's written basis at signing time, and the
+	// Run* fields snapshot the linked 检测运行 so the signed version stays
+	// traceable even if the run changes afterwards.
+	ReviewBasis    string                  `json:"reviewBasis" gorm:"size:500"`
+	RunCode        string                  `json:"runCode" gorm:"size:64;index"`
+	RunStatus      string                  `json:"runStatus" gorm:"size:40"`
+	RunMetricValue float64                 `json:"runMetricValue"`
+	RunMetricUnit  string                  `json:"runMetricUnit" gorm:"size:24"`
+	RunEvidence    string                  `json:"runEvidence" gorm:"size:2000"`
+	Revisions      []ResultSignoffRevision `json:"revisions,omitempty" gorm:"foreignKey:ResultSignoffID"`
 }
 
 func (item *ResultSignoff) GetBase() *BaseModel { return &item.BaseModel }
@@ -29,6 +38,8 @@ func (item ResultSignoff) TableName() string { return "result_signoffs" }
 var ResultSignoffInitialStatus = "draft"
 
 // ResultSignoffRevision is append-only evidence for every signoff version.
+// The review basis and assay-run snapshot are copied onto the revision created
+// by the signing decision so historical versions keep the exact grounds used.
 type ResultSignoffRevision struct {
 	ID              uint      `json:"id" gorm:"primaryKey"`
 	ResultSignoffID uint      `json:"resultSignoffId" gorm:"not null;index;uniqueIndex:idx_signoff_revision_version,priority:1"`
@@ -39,5 +50,11 @@ type ResultSignoffRevision struct {
 	RequestID       string    `json:"requestId" gorm:"size:64;not null;index"`
 	Action          string    `json:"action" gorm:"size:40;not null"`
 	Reason          string    `json:"reason" gorm:"size:500"`
+	ReviewBasis     string    `json:"reviewBasis" gorm:"size:500"`
+	RunCode         string    `json:"runCode" gorm:"size:64"`
+	RunStatus       string    `json:"runStatus" gorm:"size:40"`
+	RunMetricValue  float64   `json:"runMetricValue"`
+	RunMetricUnit   string    `json:"runMetricUnit" gorm:"size:24"`
+	RunEvidence     string    `json:"runEvidence" gorm:"size:2000"`
 	CreatedAt       time.Time `json:"createdAt" gorm:"index"`
 }

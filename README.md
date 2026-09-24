@@ -128,6 +128,7 @@ KEEP_RUNNING=1 ./scripts/validate.sh
 2. 只有原制单人可以编辑或提交草稿；每次编辑和提交均追加版本。
 3. operator 不能作出最终签发决定；reviewer/admin 可以签发或驳回，但操作者必须不同于 `preparedBy`。
 4. `signed` 和 `rejected` 为终态，全部修订可从签发查询接口读取，审计历史可由 reviewer/admin 查询。
+5. 高风险（`high`/`critical`）签发单在签发时必须填写复核依据，服务端按关联编码核验检测运行：运行不存在、尚未 `validated` 或运行风险低于签发单风险时拒绝签发（HTTP 422）并说明缺哪一项，记录留在 `peer_review`。核验通过后，运行编号、状态、检测指标和证据随复核依据一并写入本次复核版本，历史版本可回看；低风险签发不需要该门槛。
 
 ## 环境变量
 

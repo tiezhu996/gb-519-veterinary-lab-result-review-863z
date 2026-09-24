@@ -224,7 +224,10 @@ func seedResultSignoff(ctx context.Context, db *gorm.DB) error {
 		{BaseModel: model.BaseModel{Code: "RS-003", Name: "结果签发示例三", Status: "signed", Version: 1,
 			Description: "用于启动验证和主要流程演示的结果签发记录"}, Facility: "兽医检验样本结果复核区域3", Owner: "安全主管组",
 			Category: "复核", RiskLevel: "high", MetricValue: 37.5, MetricUnit: "score",
-			EffectiveAt: now.Add(6 * time.Hour), Evidence: "已完成基础证据核对", RelatedCode: "REL-519-03", PreparedBy: "operator", ReviewedBy: "reviewer", ReviewReason: "演示数据双人复核通过"},
+			EffectiveAt: now.Add(6 * time.Hour), Evidence: "已完成基础证据核对", RelatedCode: "AR-003", PreparedBy: "operator",
+			ReviewedBy: "reviewer", ReviewReason: "演示数据双人复核通过",
+			ReviewBasis: "依据 AR-003 验证通过的检测运行复核高风险结果", RunCode: "AR-003", RunStatus: "validated",
+			RunMetricValue: 37.5, RunMetricUnit: "score", RunEvidence: "已完成基础证据核对"},
 	}
 	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&items).Error; err != nil {
@@ -235,7 +238,10 @@ func seedResultSignoff(ctx context.Context, db *gorm.DB) error {
 			revisions = append(revisions, model.ResultSignoffRevision{
 				ResultSignoffID: item.ID, Version: item.Version, Status: item.Status,
 				Evidence: item.Evidence, Actor: "system-seed", RequestID: "seed-gb-519",
-				Action: "seed", Reason: "initial demonstration signoff", CreatedAt: now,
+				Action: "seed", Reason: "initial demonstration signoff",
+				ReviewBasis: item.ReviewBasis, RunCode: item.RunCode, RunStatus: item.RunStatus,
+				RunMetricValue: item.RunMetricValue, RunMetricUnit: item.RunMetricUnit,
+				RunEvidence: item.RunEvidence, CreatedAt: now,
 			})
 		}
 		return tx.Create(&revisions).Error
