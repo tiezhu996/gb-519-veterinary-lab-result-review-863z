@@ -86,7 +86,7 @@ func (h *ResultSignoffHandler) transition(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var input dto.TransitionRequest
+	var input dto.SignoffTransitionRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
 		util.Fail(c, http.StatusBadRequest, "invalid_request", err.Error())
 		return

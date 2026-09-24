@@ -12,6 +12,7 @@ import (
 type AssayRunRepository interface {
 	List(context.Context, dto.PageQuery) (Page[model.AssayRun], error)
 	Get(context.Context, uint) (model.AssayRun, error)
+	GetByCode(context.Context, string) (model.AssayRun, error)
 	Create(context.Context, *model.AssayRun) error
 	Update(context.Context, uint, uint, *model.AssayRun) error
 	Delete(context.Context, uint) error
@@ -20,10 +21,11 @@ type AssayRunRepository interface {
 
 type assayRunRepository struct {
 	store *Store[model.AssayRun]
+	db    *gorm.DB
 }
 
 func NewAssayRunRepository(db *gorm.DB) AssayRunRepository {
-	return &assayRunRepository{store: NewStore[model.AssayRun](db)}
+	return &assayRunRepository{store: NewStore[model.AssayRun](db), db: db}
 }
 
 func (r *assayRunRepository) List(ctx context.Context, q dto.PageQuery) (Page[model.AssayRun], error) {
@@ -31,6 +33,11 @@ func (r *assayRunRepository) List(ctx context.Context, q dto.PageQuery) (Page[mo
 }
 func (r *assayRunRepository) Get(ctx context.Context, id uint) (model.AssayRun, error) {
 	return r.store.Get(ctx, id)
+}
+func (r *assayRunRepository) GetByCode(ctx context.Context, code string) (model.AssayRun, error) {
+	var item model.AssayRun
+	err := r.db.WithContext(ctx).Where("code = ?", code).First(&item).Error
+	return item, err
 }
 func (r *assayRunRepository) Create(ctx context.Context, item *model.AssayRun) error {
 	return r.store.Create(ctx, item)

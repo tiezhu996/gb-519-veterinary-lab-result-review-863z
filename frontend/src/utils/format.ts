@@ -11,3 +11,10 @@ export function statusTone(status: string): 'success' | 'warning' | 'danger' | '
   if (/hold|warning|review|pending|restricted|limited|quarantine/.test(status)) return 'warning';
   return 'neutral';
 }
+
+const RISK_RANK: Record<string, number> = { low: 1, medium: 2, high: 3, critical: 4 };
+
+/** 高风险结果（high/critical）签发时必须填写复核依据并关联已验证的检测运行。 */
+export function isHighRisk(level?: string): boolean {
+  return Boolean(level && RISK_RANK[level] >= 3);
+}

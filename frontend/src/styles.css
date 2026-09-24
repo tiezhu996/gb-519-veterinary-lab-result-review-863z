@@ -48,6 +48,26 @@ td small { display: block; color: #7d8d97; margin-top: 4px; }
 .result-section h2 { margin: 0; font-size: 16px; }.result-section header span { color: #71838e; font-size: 12px; }
 .evidence-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }.evidence-strip article { min-width: 0; padding: 10px; border: 1px solid #dbe4e8; border-left: 3px solid #2a9d78; display: grid; gap: 7px; }.evidence-strip small { color: #6c7e8a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.evidence-strip code { overflow: hidden; color: #4a6474; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }.result-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .risk-tag { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 12px; font-weight: 700; }.risk-tag i { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }.risk-tag--low { color: #28735f; }.risk-tag--medium { color: #91620b; }.risk-tag--high { color: #b0444d; }.risk-tag--critical { color: #8f2630; }
+.row-actions { display: inline-flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.table-action--ghost { color: #8a5a08; }
+.block-note { color: #8a5a08; max-width: 260px; white-space: normal; }
+.review-modal { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow-y: auto; }
+.review-summary { display: grid; gap: 6px; padding: 12px; background: #f2f6f8; border-left: 3px solid #2a9d78; margin-bottom: 14px; }
+.review-summary > div { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.review-summary small { color: #6c7e8a; }
+.review-requirements { padding: 10px 12px; margin-bottom: 14px; background: #fff6dd; border-left: 3px solid #d9a013; font-size: 13px; }
+.review-requirements ul { margin: 6px 0; padding-left: 18px; }
+.review-requirements small { color: #8a6a12; }
+.review-fields { display: grid; gap: 12px; }
+.basis-line { color: #285c77; font-weight: 600; }
+.assay-line { color: #4a6474; }
+.assay-line em { display: block; font-style: normal; color: #6c7e8a; }
+.revision-toggle { padding: 0; font-size: 12px; justify-self: start; }
+.revision-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.revision-list li { border: 1px solid #e0e8ec; padding: 8px; display: grid; gap: 4px; font-size: 12px; }
+.revision-list header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.revision-list time, .revision-list small { color: #768893; }
+.revision-list p { margin: 0; color: #33454f; white-space: pre-wrap; word-break: break-word; }
 .app-loading { min-height: 100vh; display: grid; place-items: center; color: #176c55; font-weight: 700; }
 .login-page { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: #e8eef1; }
 .login-panel { width: min(430px, 100%); background: white; border-top: 5px solid #2a9d78; padding: 32px; box-shadow: 0 20px 50px rgba(24, 45, 61, .15); }

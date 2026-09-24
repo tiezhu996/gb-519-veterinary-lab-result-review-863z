@@ -18,9 +18,21 @@ export interface DomainRecord {
   preparedBy?: string;
   reviewedBy?: string;
   reviewReason?: string;
+  reviewBasis?: string;
+  pendingBlockReason?: string;
+  assayEvidence?: AssayEvidenceSnapshot;
   revisions?: SignoffRevision[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AssayEvidenceSnapshot {
+  assayCode: string;
+  assayStatus: string;
+  assayMetricName: string;
+  assayMetricValue: number;
+  assayMetricUnit: string;
+  assayEvidence: string;
 }
 
 export interface SignoffRevision {
@@ -32,6 +44,13 @@ export interface SignoffRevision {
   requestId: string;
   action: string;
   reason: string;
+  reviewBasis?: string;
+  assayCode?: string;
+  assayStatus?: string;
+  assayMetricName?: string;
+  assayMetricValue?: number;
+  assayMetricUnit?: string;
+  assayEvidence?: string;
   createdAt: string;
 }
 

@@ -60,6 +60,23 @@ viewer_audit_status=$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:
 
 now=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 suffix=$(date +%s)
+
+# 高风险签发必须绑定已验证通过且风险不低于签发单的检测运行：先创建并验证 ASSAY-SMOKE
+assay_payload=$(printf '{"code":"ASSAY-SMOKE","name":"Smoke PCR assay run","description":"Validated assay for high-risk signoff","facility":"Validation Veterinary Lab","owner":"Assay Desk","category":"PCR","riskLevel":"high","metricValue":88.5,"metricUnit":"copies/mL","effectiveAt":"%s","evidence":"run sheet and positive and negative controls","relatedCode":"SPEC-SMOKE"}' "$now")
+assay=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT:-19519}/api/assays" \
+  -H "Authorization: Bearer $operator_token" -H 'Content-Type: application/json' -H 'X-Request-ID: gb519-assay-create' \
+  -d "$assay_payload")
+assay_id=$(printf '%s' "$assay" | jq -er '.data.id')
+assay_version=$(printf '%s' "$assay" | jq -er '.data.version')
+assay_running=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT:-19519}/api/assays/$assay_id/transition" \
+  -H "Authorization: Bearer $operator_token" -H 'Content-Type: application/json' -H 'X-Request-ID: gb519-assay-running' \
+  -d "{\"status\":\"running\",\"expectedVersion\":$assay_version,\"reason\":\"assay run started\"}")
+assay_running_version=$(printf '%s' "$assay_running" | jq -er '.data.version')
+curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT:-19519}/api/assays/$assay_id/transition" \
+  -H "Authorization: Bearer $operator_token" -H 'Content-Type: application/json' -H 'X-Request-ID: gb519-assay-validated' \
+  -d "{\"status\":\"validated\",\"expectedVersion\":$assay_running_version,\"reason\":\"controls passed and run validated\"}" \
+  | jq -e '.data.status == "validated"' >/dev/null
+
 signoff_payload=$(printf '{"code":"SIGNOFF-SMOKE-%s","name":"Validated PCR result","description":"Dual-control Compose validation","facility":"Validation Veterinary Lab","owner":"Result Desk","category":"PCR","riskLevel":"high","metricValue":99.8,"metricUnit":"percent","effectiveAt":"%s","evidence":"PCR run sheet revision 1","relatedCode":"ASSAY-SMOKE"}' "$suffix" "$now")
 signoff=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT:-19519}/api/signoff" \
   -H "Authorization: Bearer $operator_token" -H 'Content-Type: application/json' -H 'X-Request-ID: gb519-signoff-create' \
@@ -83,17 +100,65 @@ printf '%s' "$peer_review" | jq -e '.data.status == "peer_review" and .data.vers
 
 operator_sign_status=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${BACKEND_PORT:-19519}/api/signoff/$signoff_id/transition" \
   -H "Authorization: Bearer $operator_token" -H 'Content-Type: application/json' -H 'X-Request-ID: gb519-operator-sign-denied' \
-  -d "{\"status\":\"signed\",\"expectedVersion\":$peer_review_version,\"reason\":\"operator must not sign\"}")
+  -d "{\"status\":\"signed\",\"expectedVersion\":$peer_review_version,\"reason\":\"operator must not sign\",\"reviewBasis\":\"operator cannot perform final review\"}")
 [ "$operator_sign_status" = "422" ]
+
+# 高风险签发缺少书面复核依据：服务端挡下，记录留在待复核并说明缺项
+blocked_status=$(curl -sS -o /tmp/gb519-blocked.json -w '%{http_code}' -X POST "http://127.0.0.1:${BACKEND_PORT:-19519}/api/signoff/$signoff_id/transition" \
+  -H "Authorization: Bearer $reviewer_token" -H 'Content-Type: application/json' -H 'X-Request-ID: gb519-signoff-blocked' \
+  -d "{\"status\":\"signed\",\"expectedVersion\":$peer_review_version,\"reason\":\"attempt sign without written basis\"}")
+[ "$blocked_status" = "422" ]
+curl -fsS "http://127.0.0.1:${BACKEND_PORT:-19519}/api/signoff/$signoff_id" \
+  -H "Authorization: Bearer $reviewer_token" \
+  | jq -e '.data.status == "peer_review" and .data.version == 3 and (.data.pendingBlockReason | contains("复核依据"))' >/dev/null
 
 signed=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT:-19519}/api/signoff/$signoff_id/transition" \
   -H "Authorization: Bearer $reviewer_token" -H 'Content-Type: application/json' -H 'X-Request-ID: gb519-signoff-signed' \
-  -d "{\"status\":\"signed\",\"expectedVersion\":$peer_review_version,\"reason\":\"independent veterinary result review passed\"}")
+  -d "{\"status\":\"signed\",\"expectedVersion\":$peer_review_version,\"reason\":\"independent veterinary result review passed\",\"reviewBasis\":\"复核 ASSAY-SMOKE 验证报告与阴阳性质控，Ct 值与复检结果一致，符合高风险签发条件\"}")
 printf '%s' "$signed" | jq -e '
   .data.status == "signed" and .data.version == 4 and .data.preparedBy == "operator" and .data.reviewedBy == "reviewer"
+  and (.data.reviewBasis | length > 0) and (.data.pendingBlockReason // "" == "")
+  and .data.assayEvidence.assayCode == "ASSAY-SMOKE" and .data.assayEvidence.assayStatus == "validated"
+  and .data.assayEvidence.assayMetricName == "PCR" and .data.assayEvidence.assayMetricValue == 88.5
   and (.data.revisions | length) == 4
   and ([.data.revisions[] | select((.evidence | length) > 0 and (.actor | length) > 0 and (.requestId | length) > 0)] | length) == 4
-  and [.data.revisions[].requestId] == ["gb519-signoff-create","gb519-signoff-update","gb519-signoff-submit","gb519-signoff-signed"]' >/dev/null
+  and [.data.revisions[].requestId] == ["gb519-signoff-create","gb519-signoff-update","gb519-signoff-submit","gb519-signoff-signed"]
+  and .data.revisions[3].reviewBasis == "复核 ASSAY-SMOKE 验证报告与阴阳性质控，Ct 值与复检结果一致，符合高风险签发条件"
+  and .data.revisions[3].assayCode == "ASSAY-SMOKE" and .data.revisions[3].assayStatus == "validated"
+  and (.data.revisions[3].assayEvidence | length > 0)' >/dev/null
+
+# 关联检测运行不存在：高风险签发被挡下，待复核原因指明缺少检测运行
+missing_assay_payload=$(printf '{"code":"SIGNOFF-MISSING-%s","name":"Missing assay guard","description":"Assay lookup validation","facility":"Validation Veterinary Lab","owner":"Result Desk","category":"PCR","riskLevel":"critical","metricValue":97,"metricUnit":"percent","effectiveAt":"%s","evidence":"attempt signoff against missing assay","relatedCode":"ASSAY-NOT-FOUND"}' "$suffix" "$now")
+missing_signoff=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT:-19519}/api/signoff" \
+  -H "Authorization: Bearer $operator_token" -H 'Content-Type: application/json' -H 'X-Request-ID: gb519-missing-create' \
+  -d "$missing_assay_payload")
+missing_id=$(printf '%s' "$missing_signoff" | jq -er '.data.id')
+missing_version=$(printf '%s' "$missing_signoff" | jq -er '.data.version')
+curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT:-19519}/api/signoff/$missing_id/transition" \
+  -H "Authorization: Bearer $operator_token" -H 'Content-Type: application/json' -H 'X-Request-ID: gb519-missing-submit' \
+  -d "{\"status\":\"peer_review\",\"expectedVersion\":$missing_version,\"reason\":\"submit critical signoff\"}" >/dev/null
+missing_block_status=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:${BACKEND_PORT:-19519}/api/signoff/$missing_id/transition" \
+  -H "Authorization: Bearer $reviewer_token" -H 'Content-Type: application/json' -H 'X-Request-ID: gb519-missing-blocked' \
+  -d "{\"status\":\"signed\",\"expectedVersion\":$((missing_version+1)),\"reason\":\"attempt sign with missing assay\",\"reviewBasis\":\"review against referenced assay run and controls\"}")
+[ "$missing_block_status" = "422" ]
+curl -fsS "http://127.0.0.1:${BACKEND_PORT:-19519}/api/signoff/$missing_id" \
+  -H "Authorization: Bearer $reviewer_token" \
+  | jq -e '.data.status == "peer_review" and (.data.pendingBlockReason | contains("找不到对应检测运行"))' >/dev/null
+
+# 低风险签发照旧：无需复核依据和检测运行即可签发
+low_payload=$(printf '{"code":"SIGNOFF-LOW-%s","name":"Low risk signoff","description":"Low risk unchanged flow","facility":"Validation Veterinary Lab","owner":"Result Desk","category":"常规","riskLevel":"low","metricValue":10,"metricUnit":"unit","effectiveAt":"%s","evidence":"routine low risk evidence","relatedCode":""}' "$suffix" "$now")
+low_signoff=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT:-19519}/api/signoff" \
+  -H "Authorization: Bearer $operator_token" -H 'Content-Type: application/json' -H 'X-Request-ID: gb519-low-create' \
+  -d "$low_payload")
+low_id=$(printf '%s' "$low_signoff" | jq -er '.data.id')
+low_version=$(printf '%s' "$low_signoff" | jq -er '.data.version')
+curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT:-19519}/api/signoff/$low_id/transition" \
+  -H "Authorization: Bearer $operator_token" -H 'Content-Type: application/json' -H 'X-Request-ID: gb519-low-submit' \
+  -d "{\"status\":\"peer_review\",\"expectedVersion\":$low_version,\"reason\":\"submit low risk result\"}" >/dev/null
+curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT:-19519}/api/signoff/$low_id/transition" \
+  -H "Authorization: Bearer $reviewer_token" -H 'Content-Type: application/json' -H 'X-Request-ID: gb519-low-signed' \
+  -d "{\"status\":\"signed\",\"expectedVersion\":$((low_version+1)),\"reason\":\"low risk independent review passed\"}" \
+  | jq -e '.data.status == "signed" and (.data.assayEvidence == null)' >/dev/null
 
 admin_payload=$(printf '{"code":"SIGNOFF-SELF-%s","name":"Self review guard","description":"Separation of duty validation","facility":"Validation Veterinary Lab","owner":"Admin Desk","category":"PCR","riskLevel":"medium","metricValue":98,"metricUnit":"percent","effectiveAt":"%s","evidence":"self review guard evidence","relatedCode":"ASSAY-SELF"}' "$suffix" "$now")
 admin_signoff=$(curl -fsS -X POST "http://127.0.0.1:${BACKEND_PORT:-19519}/api/signoff" \

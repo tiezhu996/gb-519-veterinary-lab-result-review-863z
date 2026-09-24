@@ -82,6 +82,7 @@ func migrate(db *gorm.DB) error {
 		&model.AssayRun{},
 		&model.ResultSignoff{},
 		&model.ResultSignoffRevision{},
+		&model.SignoffAssayEvidence{},
 	)
 }
 
@@ -221,10 +222,16 @@ func seedResultSignoff(ctx context.Context, db *gorm.DB) error {
 			Category: "重点", RiskLevel: "medium", MetricValue: 25.0, MetricUnit: "%",
 			EffectiveAt: now.Add(3 * time.Hour), Evidence: "已完成基础证据核对", RelatedCode: "REL-519-02", PreparedBy: "operator"},
 
-		{BaseModel: model.BaseModel{Code: "RS-003", Name: "结果签发示例三", Status: "signed", Version: 1,
+		{BaseModel: model.BaseModel{Code: "RS-003", Name: "结果签发示例三", Status: "signed", Version: 2,
 			Description: "用于启动验证和主要流程演示的结果签发记录"}, Facility: "兽医检验样本结果复核区域3", Owner: "安全主管组",
 			Category: "复核", RiskLevel: "high", MetricValue: 37.5, MetricUnit: "score",
-			EffectiveAt: now.Add(6 * time.Hour), Evidence: "已完成基础证据核对", RelatedCode: "REL-519-03", PreparedBy: "operator", ReviewedBy: "reviewer", ReviewReason: "演示数据双人复核通过"},
+			EffectiveAt: now.Add(6 * time.Hour), Evidence: "已完成基础证据核对", RelatedCode: "AR-003", PreparedBy: "operator", ReviewedBy: "reviewer",
+			ReviewReason: "演示数据双人复核通过", ReviewBasis: "复核 AR-003 验证报告与阴阳性质控，Ct 值与复检结果一致，符合高风险签发条件"},
+
+		{BaseModel: model.BaseModel{Code: "RS-004", Name: "高风险结果签发待复核", Status: "peer_review", Version: 2,
+			Description: "高风险签发：复核员须填写复核依据并核对已验证通过的检测运行"}, Facility: "兽医检验样本结果复核区域3", Owner: "安全主管组",
+			Category: "复核", RiskLevel: "critical", MetricValue: 42.1, MetricUnit: "score",
+			EffectiveAt: now.Add(9 * time.Hour), Evidence: "荧光定量 PCR 初检阳性，待复核员核对 AR-002", RelatedCode: "AR-002", PreparedBy: "operator"},
 	}
 	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&items).Error; err != nil {
@@ -232,11 +239,41 @@ func seedResultSignoff(ctx context.Context, db *gorm.DB) error {
 		}
 		revisions := make([]model.ResultSignoffRevision, 0, len(items))
 		for _, item := range items {
-			revisions = append(revisions, model.ResultSignoffRevision{
+			revision := model.ResultSignoffRevision{
 				ResultSignoffID: item.ID, Version: item.Version, Status: item.Status,
 				Evidence: item.Evidence, Actor: "system-seed", RequestID: "seed-gb-519",
 				Action: "seed", Reason: "initial demonstration signoff", CreatedAt: now,
-			})
+			}
+			if item.Code == "RS-003" {
+				revision.Version = 1
+				revisions = append(revisions, revision)
+				revision = model.ResultSignoffRevision{
+					ResultSignoffID: item.ID, Version: 2, Status: "signed", Evidence: item.Evidence,
+					Actor: "reviewer", RequestID: "seed-gb-519-sign", Action: "transition",
+					Reason: item.ReviewReason, ReviewBasis: item.ReviewBasis,
+					AssayCode: "AR-003", AssayStatus: "validated", AssayMetricName: "复核",
+					AssayMetricVal: 37.5, AssayMetricUnit: "score", AssayEvidence: "已完成基础证据核对",
+					CreatedAt: now,
+				}
+				if err := tx.Create(&model.SignoffAssayEvidence{
+					ResultSignoffID: item.ID, AssayCode: "AR-003", AssayStatus: "validated",
+					AssayMetricName: "复核", AssayMetricVal: 37.5, AssayMetricUnit: "score",
+					AssayEvidence: "已完成基础证据核对", CreatedAt: now, UpdatedAt: now,
+				}).Error; err != nil {
+					return err
+				}
+			}
+			if item.Code == "RS-004" {
+				revision.Version = 1
+				revision.Status = "draft"
+				revisions = append(revisions, revision)
+				revision = model.ResultSignoffRevision{
+					ResultSignoffID: item.ID, Version: 2, Status: "peer_review", Evidence: item.Evidence,
+					Actor: "operator", RequestID: "seed-gb-519-submit", Action: "transition",
+					Reason: "submit high-risk signoff for independent review", CreatedAt: now,
+				}
+			}
+			revisions = append(revisions, revision)
 		}
 		return tx.Create(&revisions).Error
 	})

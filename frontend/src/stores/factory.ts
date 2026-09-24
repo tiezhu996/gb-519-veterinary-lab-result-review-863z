@@ -3,6 +3,11 @@ import { create } from 'zustand';
 import { request } from '../api/client';
 import type { ApiEnvelope, DomainRecord, PageMeta } from '../types/domain';
 
+export interface TransitionOptions {
+  reason?: string;
+  reviewBasis?: string;
+}
+
 export interface EntityState {
   items: DomainRecord[];
   meta: PageMeta;
@@ -10,7 +15,7 @@ export interface EntityState {
   error: string;
   load: (path: string, search?: string) => Promise<void>;
   createRecord: (path: string, input: Partial<DomainRecord>) => Promise<void>;
-  transition: (path: string, item: DomainRecord, status: string) => Promise<void>;
+  transition: (path: string, item: DomainRecord, status: string, options?: TransitionOptions) => Promise<void>;
 }
 export type EntityStore = ReturnType<typeof createEntityStore>;
 
@@ -31,10 +36,15 @@ export function createEntityStore() {
         await get().load(path);
       } catch (error) { set({ error: error instanceof Error ? error.message : String(error), loading: false }); throw error; }
     },
-    transition: async (path, item, status) => {
+    transition: async (path, item, status, options = {}) => {
       set({ loading: true, error: '' });
       try {
-        await request<DomainRecord>(`/${path}/${item.id}/transition`, { method: 'POST', body: JSON.stringify({ status, expectedVersion: item.version, reason: '前端工作台人工确认' }) });
+        const payload: Record<string, unknown> = {
+          status, expectedVersion: item.version,
+          reason: options.reason || '前端工作台人工确认',
+        };
+        if (options.reviewBasis !== undefined) payload.reviewBasis = options.reviewBasis;
+        await request<DomainRecord>(`/${path}/${item.id}/transition`, { method: 'POST', body: JSON.stringify(payload) });
         await get().load(path);
       } catch (error) { set({ error: error instanceof Error ? error.message : String(error), loading: false }); throw error; }
     },

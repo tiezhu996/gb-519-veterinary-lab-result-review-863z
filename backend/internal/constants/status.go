@@ -26,6 +26,19 @@ const (
 
 var AllSignoffState = []string{"draft", "peer_review", "signed", "rejected"}
 
+// RiskLevels 为统一的风险等级排序；数字越大风险越高。
+var riskRank = map[string]int{"low": 1, "medium": 2, "high": 3, "critical": 4}
+
+// IsHighRiskSignoff 判断签发单是否属于高风险（high/critical）。
+func IsHighRiskSignoff(level string) bool {
+	return riskRank[level] >= 3
+}
+
+// RiskAtLeast 判断 actual 风险是否不低于 required。
+func RiskAtLeast(actual, required string) bool {
+	return riskRank[actual] >= riskRank[required] && riskRank[actual] > 0
+}
+
 var AnimalCaseTransitions = map[string]map[string]bool{
 	"registered": {"sampling": true, "testing": true},
 	"sampling":   {"testing": true, "closed": true, "registered": true},
